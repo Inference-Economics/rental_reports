@@ -1,0 +1,111 @@
+name: Publish monthly rental reports
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: '20 16 1 * *'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    env:
+      WEBFLOW_TOKEN: ${{ secrets.WEBFLOW_TOKEN }}
+      WEBFLOW_SITE_ID: ${{ secrets.WEBFLOW_SITE_ID }}
+      RENTAL_COLLECTION_ID: ${{ secrets.RENTAL_COLLECTION_ID }}
+      MONTH: ${{ vars.MONTH || '' }}
+    steps:
+      - name: Checkout reports repo
+        uses: actions/checkout@v4
+
+      - name: Set MONTH (last month, UTC)
+        run: |
+          if [ -z "${MONTH}" ]; then
+            echo "MONTH=$(date -u -d '1 month ago' +'%Y-%m')" >> $GITHUB_ENV
+          else
+            echo "MONTH=${MONTH}" >> $GITHUB_ENV
+          fi
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Build reports
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r rent-report/requirements.txt
+          pip install -r rent-report-vancouver/requirements.txt
+
+          mkdir -p reports/toronto/"$MONTH" reports/vancouver/"$MONTH"
+
+          # TORONTO: ensure the script accepts month/out OR copy from a known path
+          python rent-report/run_report.py --month "$MONTH-01" --out "reports/toronto/$MONTH/index.html"
+
+          # VANCOUVER:
+          python rent-report-vancouver/run_report_vancouver.py \
+            --csv rent-report-vancouver/data/vancouver_craigslist_rentals.csv \
+            --month "$MONTH-01" \
+            --out "reports/vancouver/$MONTH/index.html"
+
+          # Sanity check artifacts exist
+          test -s "reports/toronto/$MONTH/index.html"
+          test -s "reports/vancouver/$MONTH/index.html"
+
+      - name: Commit HTML
+        run: |
+          git config user.name "gh-actions"
+          git config user.email "actions@github.com"
+          git add reports
+          git commit -m "Publish $MONTH" || true
+          git push
+
+      - name: Create Webflow CMS items
+        run: |
+          set -euo pipefail
+
+          mkpost () {
+            CITY="$1"                                  # toronto / vancouver
+            CITY_TITLE="$(tr '[:lower:]' '[:upper:]' <<< ${CITY:0:1})${CITY:1}"  # Toronto / Vancouver
+            MONTH_HUMAN="$(date -u -d "$MONTH-01" +'%B %Y')"
+            TITLE="${CITY_TITLE} Rental Report — ${MONTH_HUMAN}"
+            URL="https://reports.inference-economics.com/reports/${CITY}/${MONTH}/"
+
+            # generate a slug (lowercase, hyphenated)
+            SLUG=$(printf "%s" "$TITLE" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-' | sed 's/^-//; s/-$//')
+
+            # Rich Text expects HTML
+            SUMMARY_HTML="<p>Summary of asking rents in ${CITY_TITLE} for ${MONTH_HUMAN} presented by Inference Economics.</p>"
+
+            # POST (published item). Required keys are: name, slug. Use your actual field slugs from schema.
+            curl -s -X POST "https://api.webflow.com/v2/collections/${RENTAL_COLLECTION_ID}/items" \
+              -H "Authorization: Bearer ${WEBFLOW_TOKEN}" \
+              -H "Content-Type: application/json" \
+              -d @- <<EOF
+{
+  "isArchived": false,
+  "isDraft": false,
+  "fieldData": {
+    "name": "$TITLE",
+    "slug": "$SLUG",
+    "city": "$CITY_TITLE",
+    "report-month": "${MONTH}-01",
+    "external-report-url": "$URL",
+    "summary": "$SUMMARY_HTML"
+  }
+}
+EOF
+          }
+
+          mkpost toronto
+          mkpost vancouver
+
+      - name: Publish site
+        run: |
+          curl -s -X POST "https://api.webflow.com/v2/sites/${WEBFLOW_SITE_ID}/publish" \
+            -H "Authorization: Bearer ${WEBFLOW_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d '{"publishToWebflowSubdomain": true, "publishToCustomDomains": true}'
