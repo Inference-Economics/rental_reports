@@ -58,7 +58,7 @@ jobs:
             MONTH_HUMAN="$(date -u -d "$MONTH-01" +'%B %Y' 2>/dev/null || date -j -f '%Y-%m' "$MONTH" '+%B %Y')"
             TITLE="${CITY_TITLE} Rental Report — ${MONTH_HUMAN}"
             URL="https://reports.inference-economics.com/reports/${CITY}/${MONTH}/"
-            SUMMARY="${CITY_TITLE} rental listings report for ${MONTH_HUMAN}."
+            SUMMARY="Summary of asking rents in ${CITY_TITLE}  for ${MONTH_HUMAN} presented by Inference Economics."
             curl -s -X POST "https://api.webflow.com/v2/collections/${RENTAL_COLLECTION_ID}/items" \
               -H "Authorization: Bearer ${WEBFLOW_TOKEN}" \
               -H "Content-Type: application/json" \
