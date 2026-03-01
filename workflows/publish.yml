@@ -1,7 +1,11 @@
 name: Publish monthly rental reports
 
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      backfill_month:
+        description: 'Month to backfill (YYYY-MM)'
+        required: false
   schedule:
     - cron: '20 16 1 * *'
 
@@ -21,9 +25,11 @@ jobs:
       - name: Checkout reports repo
         uses: actions/checkout@v4
 
-      - name: Set MONTH (last month, UTC)
+      - name: Set MONTH
         run: |
-          if [ -z "${MONTH}" ]; then
+          if [ "${{ github.event.inputs.backfill_month }}" != "" ]; then
+            echo "MONTH=${{ github.event.inputs.backfill_month }}" >> $GITHUB_ENV
+          elif [ -z "${MONTH}" ]; then
             echo "MONTH=$(date -u -d '1 month ago' +'%Y-%m')" >> $GITHUB_ENV
           else
             echo "MONTH=${MONTH}" >> $GITHUB_ENV
