@@ -68,23 +68,23 @@ jobs:
           set -euo pipefail
 
           mkpost () {
-            CITY="$1"                                  # toronto / vancouver
-            CITY_TITLE="$(tr '[:lower:]' '[:upper:]' <<< ${CITY:0:1})${CITY:1}"  # Toronto / Vancouver
-            MONTH_HUMAN="$(date -u -d "$MONTH-01" +'%B %Y')"
-            TITLE="${CITY_TITLE} Rental Report — ${MONTH_HUMAN}"
-            URL="https://reports.inference-economics.com/reports/${CITY}/${MONTH}/"
+          CITY="$1"
+          CITY_TITLE="$(tr '[:lower:]' '[:upper:]' <<< ${CITY:0:1})${CITY:1}"
+          MONTH_HUMAN="$(date -u -d "$MONTH-01" +'%B %Y')"
+          TITLE="${CITY_TITLE} Rental Report — ${MONTH_HUMAN}"
+          URL="https://reports.inference-economics.com/reports/${CITY}/${MONTH}/"
+  
+ 
+          ISO_DATE="${MONTH}-01T00:00:00.000Z"
 
-            # generate a slug (lowercase, hyphenated)
-            SLUG=$(printf "%s" "$TITLE" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-' | sed 's/^-//; s/-$//')
+              # generate a slug
+          SLUG=$(printf "%s" "$TITLE" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-' | sed 's/^-//; s/-$//')
 
-            # Rich Text expects HTML
-            SUMMARY_HTML="<p>Summary of asking rents in ${CITY_TITLE} for ${MONTH_HUMAN} presented by Inference Economics.</p>"
 
-            # POST (published item). Required keys are: name, slug. Use your actual field slugs from schema.
-            curl -s -X POST "https://api.webflow.com/v2/collections/${RENTAL_COLLECTION_ID}/items" \
-              -H "Authorization: Bearer ${WEBFLOW_TOKEN}" \
-              -H "Content-Type: application/json" \
-              -d @- <<EOF
+          curl -s -X POST "https://api.webflow.com/v2/collections/${RENTAL_COLLECTION_ID}/items" \
+          -H "Authorization: Bearer ${WEBFLOW_TOKEN}" \
+          -H "Content-Type: application/json" \
+          -d @- <<EOF
 {
   "isArchived": false,
   "isDraft": false,
@@ -92,9 +92,9 @@ jobs:
     "name": "$TITLE",
     "slug": "$SLUG",
     "city": "$CITY_TITLE",
-    "report-month": "${MONTH}-01",
+    "report-month": "$ISO_DATE",
     "external-report-url": "$URL",
-    "summary": "$SUMMARY_HTML"
+    "summary": "<p>Monthly rental market intelligence for ${CITY_TITLE}.</p>"
   }
 }
 EOF
