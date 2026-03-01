@@ -115,3 +115,5 @@ EOF
             -H "Authorization: Bearer ${WEBFLOW_TOKEN}" \
             -H "Content-Type: application/json" \
             -d '{"publishToWebflowSubdomain": true, "publishToCustomDomains": true}'
+
+  
