@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   build-and-publish:
-    if: github.ref == "refs/heads/main"
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
 
     env:
@@ -50,18 +50,15 @@ jobs:
 
           mkdir -p reports/toronto/"$MONTH" reports/vancouver/"$MONTH"
 
-          # TORONTO
           python rent-report/run_report.py \
             --month "$MONTH-01" \
             --out "reports/toronto/$MONTH/index.html"
 
-          # VANCOUVER
           python rent-report-vancouver/run_report_vancouver.py \
             --csv rent-report-vancouver/data/vancouver_craigslist_rentals.csv \
             --month "$MONTH-01" \
             --out "reports/vancouver/$MONTH/index.html"
 
-          # Sanity check artifacts exist
           test -s "reports/toronto/$MONTH/index.html"
           test -s "reports/vancouver/$MONTH/index.html"
 
@@ -76,13 +73,18 @@ jobs:
       - name: Create Webflow CMS items
         run: |
           set -euo pipefail
-          RUN_MONTH="${{ github.event.inputs.backfill_month || env.MONTH }}"
+
+          if [ "${{ github.event.inputs.backfill_month }}" != "" ]; then
+            RUN_MONTH="${{ github.event.inputs.backfill_month }}"
+          else
+            RUN_MONTH="$MONTH"
+          fi
 
           mkpost () {
             CITY="$1"
             CITY_TITLE="$(tr '[:lower:]' '[:upper:]' <<< ${CITY:0:1})${CITY:1}"
             MONTH_HUMAN=$(date -u -d "${RUN_MONTH}-01" +'%B %Y')
-            TITLE="${CITY_TITLE} Rental Report — ${MONTH_HUMAN}"
+            TITLE="${CITY_TITLE} Rental Report ${MONTH_HUMAN}"
             URL="https://reports.inference-economics.com/reports/${CITY}/${RUN_MONTH}/"
             SLUG="${CITY}-rentals-${RUN_MONTH}"
 
