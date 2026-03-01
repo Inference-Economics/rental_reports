@@ -4,23 +4,25 @@ on:
   workflow_dispatch:
     inputs:
       backfill_month:
-        description: 'Month to backfill (YYYY-MM)'
+        description: "Month to backfill (YYYY-MM)"
         required: false
   schedule:
-    - cron: '20 16 1 * *'
+    - cron: "20 16 1 * *"
 
 permissions:
   contents: write
 
 jobs:
   build-and-publish:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == "refs/heads/main"
     runs-on: ubuntu-latest
+
     env:
       WEBFLOW_TOKEN: ${{ secrets.WEBFLOW_TOKEN }}
       WEBFLOW_SITE_ID: ${{ secrets.WEBFLOW_SITE_ID }}
       RENTAL_COLLECTION_ID: ${{ secrets.RENTAL_COLLECTION_ID }}
       MONTH: ${{ vars.MONTH || '' }}
+
     steps:
       - name: Checkout reports repo
         uses: actions/checkout@v4
@@ -38,7 +40,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
       - name: Build reports
         run: |
@@ -48,10 +50,12 @@ jobs:
 
           mkdir -p reports/toronto/"$MONTH" reports/vancouver/"$MONTH"
 
-          # TORONTO: ensure the script accepts month/out OR copy from a known path
-          python rent-report/run_report.py --month "$MONTH-01" --out "reports/toronto/$MONTH/index.html"
+          # TORONTO
+          python rent-report/run_report.py \
+            --month "$MONTH-01" \
+            --out "reports/toronto/$MONTH/index.html"
 
-          # VANCOUVER:
+          # VANCOUVER
           python rent-report-vancouver/run_report_vancouver.py \
             --csv rent-report-vancouver/data/vancouver_craigslist_rentals.csv \
             --month "$MONTH-01" \
@@ -86,18 +90,18 @@ jobs:
               -H "Authorization: Bearer ${WEBFLOW_TOKEN}" \
               -H "Content-Type: application/json" \
               -d @- <<EOF
-              {
-    "isArchived": false,
-    "isDraft": false,
-    "fieldData": {
-      "name": "$TITLE",
-      "slug": "$SLUG",
-      "city": "$CITY_TITLE",
-      "report-month": "${RUN_MONTH}-01T00:00:00.000Z",
-      "external-report-url": "$URL",
-      "summary": "<p>Monthly rental market intelligence for ${CITY_TITLE}.</p>"
-      }
-    }
+{
+  "isArchived": false,
+  "isDraft": false,
+  "fieldData": {
+    "name": "$TITLE",
+    "slug": "$SLUG",
+    "city": "$CITY_TITLE",
+    "report-month": "${RUN_MONTH}-01T00:00:00.000Z",
+    "external-report-url": "$URL",
+    "summary": "<p>Monthly rental market intelligence for ${CITY_TITLE}.</p>"
+  }
+}
 EOF
           }
 
@@ -110,5 +114,3 @@ EOF
             -H "Authorization: Bearer ${WEBFLOW_TOKEN}" \
             -H "Content-Type: application/json" \
             -d '{"publishToWebflowSubdomain": true, "publishToCustomDomains": true}'
-
-  
