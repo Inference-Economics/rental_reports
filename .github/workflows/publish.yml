@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   build-and-publish:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == "refs/heads/main"
     runs-on: ubuntu-latest
 
     env:
@@ -83,28 +83,31 @@ jobs:
           mkpost () {
             CITY="$1"
             CITY_TITLE="$(tr '[:lower:]' '[:upper:]' <<< ${CITY:0:1})${CITY:1}"
-            MONTH_HUMAN=$(date -u -d "${RUN_MONTH}-01" +'%B %Y')
+            MONTH_HUMAN="$(date -u -d "${RUN_MONTH}-01" +'%B %Y')"
             TITLE="${CITY_TITLE} Rental Report ${MONTH_HUMAN}"
             URL="https://reports.inference-economics.com/reports/${CITY}/${RUN_MONTH}/"
             SLUG="${CITY}-rentals-${RUN_MONTH}"
 
-            curl -s -X POST "https://api.webflow.com/v2/collections/${RENTAL_COLLECTION_ID}/items" \
-              -H "Authorization: Bearer ${WEBFLOW_TOKEN}" \
-              -H "Content-Type: application/json" \
-              -d @- <<EOF
+            BODY="$(cat <<JSON
 {
   "isArchived": false,
   "isDraft": false,
   "fieldData": {
-    "name": "$TITLE",
-    "slug": "$SLUG",
-    "city": "$CITY_TITLE",
+    "name": "${TITLE}",
+    "slug": "${SLUG}",
+    "city": "${CITY_TITLE}",
     "report-month": "${RUN_MONTH}-01T00:00:00.000Z",
-    "external-report-url": "$URL",
+    "external-report-url": "${URL}",
     "summary": "<p>Monthly rental market intelligence for ${CITY_TITLE}.</p>"
   }
 }
-EOF
+JSON
+)"
+
+            curl -sS -X POST "https://api.webflow.com/v2/collections/${RENTAL_COLLECTION_ID}/items" \
+              -H "Authorization: Bearer ${WEBFLOW_TOKEN}" \
+              -H "Content-Type: application/json" \
+              --data "${BODY}"
           }
 
           mkpost toronto
@@ -112,7 +115,7 @@ EOF
 
       - name: Publish site
         run: |
-          curl -s -X POST "https://api.webflow.com/v2/sites/${WEBFLOW_SITE_ID}/publish" \
+          curl -sS -X POST "https://api.webflow.com/v2/sites/${WEBFLOW_SITE_ID}/publish" \
             -H "Authorization: Bearer ${WEBFLOW_TOKEN}" \
             -H "Content-Type: application/json" \
             -d '{"publishToWebflowSubdomain": true, "publishToCustomDomains": true}'
