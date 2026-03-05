@@ -88,32 +88,8 @@ jobs:
             URL="https://reports.inference-economics.com/reports/${CITY}/${RUN_MONTH}/"
             SLUG="${CITY}-rentals-${RUN_MONTH}"
 
-            export CITY_TITLE TITLE URL SLUG RUN_MONTH
-
-            BODY="$(python - <<'PY'
-import json, os
-city_title = os.environ["CITY_TITLE"]
-title = os.environ["TITLE"]
-slug = os.environ["SLUG"]
-url = os.environ["URL"]
-run_month = os.environ["RUN_MONTH"]
-
-payload = {
-  "isArchived": False,
-  "isDraft": False,
-  "fieldData": {
-    "name": title,
-    "slug": slug,
-    "city": city_title,
-    "report-month": f"{run_month}-01T00:00:00.000Z",
-    "external-report-url": url,
-    "summary": f"<p>Monthly rental market intelligence for {city_title}.</p>"
-  }
-}
-
-print(json.dumps(payload))
-PY
-)"
+            BODY="$(python -c "import os,json; run=os.environ['RUN_MONTH']; city=os.environ['CITY_TITLE']; title=os.environ['TITLE']; slug=os.environ['SLUG']; url=os.environ['URL']; print(json.dumps({'isArchived': False, 'isDraft': False, 'fieldData': {'name': title, 'slug': slug, 'city': city, 'report-month': f'{run}-01T00:00:00.000Z', 'external-report-url': url, 'summary': f'<p>Monthly rental market intelligence for {city}.</p>'}}))" \
+              RUN_MONTH="$RUN_MONTH" CITY_TITLE="$CITY_TITLE" TITLE="$TITLE" SLUG="$SLUG" URL="$URL")"
 
             curl -sS -X POST "https://api.webflow.com/v2/collections/${RENTAL_COLLECTION_ID}/items" \
               -H "Authorization: Bearer ${WEBFLOW_TOKEN}" \
