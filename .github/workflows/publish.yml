@@ -92,4 +92,4 @@ jobs:
           curl -fsS -X POST "https://api.webflow.com/v2/sites/${WEBFLOW_SITE_ID}/publish" \
             -H "Authorization: Bearer ${WEBFLOW_TOKEN}" \
             -H "Content-Type: application/json" \
-            -d '{"publishToWebflowSubdomain": true, "publishToCustomDomains": true}'
+            -d '{"publishToWebflowSubdomain": true}'
