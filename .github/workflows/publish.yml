@@ -20,6 +20,7 @@ jobs:
     env:
       WEBFLOW_TOKEN: ${{ secrets.WEBFLOW_TOKEN }}
       WEBFLOW_SITE_ID: ${{ secrets.WEBFLOW_SITE_ID }}
+      WEBFLOW_CUSTOM_DOMAIN_IDS: ${{ secrets.WEBFLOW_CUSTOM_DOMAIN_IDS }}
       RENTAL_COLLECTION_ID: ${{ secrets.RENTAL_COLLECTION_ID }}
       MONTH: ${{ vars.MONTH || '' }}
 
@@ -108,7 +109,11 @@ jobs:
       - name: Publish site
         shell: bash
         run: |
+          PUBLISH_BODY="$(
+            python -c "import json, os; domains=[d.strip() for d in os.environ.get('WEBFLOW_CUSTOM_DOMAIN_IDS', '').split(',') if d.strip()]; body={'publishToWebflowSubdomain': True}; body.update({'customDomains': domains} if domains else {}); print(json.dumps(body))"
+          )"
+
           curl -fsS -X POST "https://api.webflow.com/v2/sites/${WEBFLOW_SITE_ID}/publish" \
             -H "Authorization: Bearer ${WEBFLOW_TOKEN}" \
             -H "Content-Type: application/json" \
-            -d '{"publishToWebflowSubdomain": true}'
+            -d "${PUBLISH_BODY}"
