@@ -22,7 +22,6 @@ jobs:
       WEBFLOW_SITE_ID: ${{ secrets.WEBFLOW_SITE_ID }}
       WEBFLOW_CUSTOM_DOMAIN_IDS: ${{ secrets.WEBFLOW_CUSTOM_DOMAIN_IDS }}
       RENTAL_COLLECTION_ID: ${{ secrets.RENTAL_COLLECTION_ID }}
-      MONTH: ${{ vars.MONTH || '' }}
 
     steps:
       - name: Checkout reports repo
@@ -33,10 +32,8 @@ jobs:
         run: |
           if [ "${{ github.event.inputs.backfill_month }}" != "" ]; then
             echo "MONTH=${{ github.event.inputs.backfill_month }}" >> "$GITHUB_ENV"
-          elif [ -z "${MONTH}" ]; then
-            echo "MONTH=$(date -u -d '1 month ago' +'%Y-%m')" >> "$GITHUB_ENV"
           else
-            echo "MONTH=${MONTH}" >> "$GITHUB_ENV"
+            echo "MONTH=$(date -u -d '1 month ago' +'%Y-%m')" >> "$GITHUB_ENV"
           fi
 
       - name: Verify reports exist
@@ -80,7 +77,8 @@ jobs:
 
             RESPONSE_FILE="$(mktemp)"
             HTTP_STATUS="$(
-              curl -sS -o "$RESPONSE_FILE" -w "%{http_code}" -X POST "https://api.webflow.com/v2/collections/${RENTAL_COLLECTION_ID}/items" \
+              curl --retry 5 --retry-all-errors --retry-delay 10 --retry-max-time 180 \
+              -sS -o "$RESPONSE_FILE" -w "%{http_code}" -X POST "https://api.webflow.com/v2/collections/${RENTAL_COLLECTION_ID}/items" \
               -H "Authorization: Bearer ${WEBFLOW_TOKEN}" \
               -H "Content-Type: application/json" \
               --data "${BODY}"
@@ -109,11 +107,14 @@ jobs:
       - name: Publish site
         shell: bash
         run: |
+          : "${WEBFLOW_CUSTOM_DOMAIN_IDS:?WEBFLOW_CUSTOM_DOMAIN_IDS secret is required for production publishing}"
+
           PUBLISH_BODY="$(
             python -c "import json, os; domains=[d.strip() for d in os.environ.get('WEBFLOW_CUSTOM_DOMAIN_IDS', '').split(',') if d.strip()]; body={'publishToWebflowSubdomain': True}; body.update({'customDomains': domains} if domains else {}); print(json.dumps(body))"
           )"
 
-          curl -fsS -X POST "https://api.webflow.com/v2/sites/${WEBFLOW_SITE_ID}/publish" \
+          curl --retry 5 --retry-all-errors --retry-delay 10 --retry-max-time 180 \
+            -fsS -X POST "https://api.webflow.com/v2/sites/${WEBFLOW_SITE_ID}/publish" \
             -H "Authorization: Bearer ${WEBFLOW_TOKEN}" \
             -H "Content-Type: application/json" \
             -d "${PUBLISH_BODY}"
