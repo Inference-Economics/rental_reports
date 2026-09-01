@@ -20,7 +20,7 @@ jobs:
     env:
       WEBFLOW_TOKEN: ${{ secrets.WEBFLOW_TOKEN }}
       WEBFLOW_SITE_ID: ${{ secrets.WEBFLOW_SITE_ID }}
-      WEBFLOW_CUSTOM_DOMAIN_IDS: ${{ secrets.WEBFLOW_CUSTOM_DOMAIN_IDS }}
+      WEBFLOW_PRODUCTION_DOMAIN: www.inference-economics.com
       RENTAL_COLLECTION_ID: ${{ secrets.RENTAL_COLLECTION_ID }}
 
     steps:
@@ -107,12 +107,14 @@ jobs:
       - name: Publish site
         shell: bash
         run: |
-          : "${WEBFLOW_CUSTOM_DOMAIN_IDS:?WEBFLOW_CUSTOM_DOMAIN_IDS secret is required for production publishing}"
-
           PUBLISH_BODY="$(
-            python -c "import json, os; domains=[d.strip() for d in os.environ.get('WEBFLOW_CUSTOM_DOMAIN_IDS', '').split(',') if d.strip()]; body={'publishToWebflowSubdomain': True}; body.update({'customDomains': domains} if domains else {}); print(json.dumps(body))"
+            curl --retry 5 --retry-all-errors --retry-delay 10 --retry-max-time 180 \
+              -fsS "https://api.webflow.com/v2/sites/${WEBFLOW_SITE_ID}/custom_domains" \
+              -H "Authorization: Bearer ${WEBFLOW_TOKEN}" | \
+            python -c "import json, os, sys; data=json.load(sys.stdin); target=os.environ['WEBFLOW_PRODUCTION_DOMAIN']; ids=[d['id'] for d in data.get('customDomains', []) if d.get('url', '').rstrip('/') == target]; ids or sys.exit(f'Production domain not found in Webflow: {target}'); print(json.dumps({'publishToWebflowSubdomain': True, 'customDomains': ids}))"
           )"
 
+          echo "Publishing to staging and ${WEBFLOW_PRODUCTION_DOMAIN}"
           curl --retry 5 --retry-all-errors --retry-delay 10 --retry-max-time 180 \
             -fsS -X POST "https://api.webflow.com/v2/sites/${WEBFLOW_SITE_ID}/publish" \
             -H "Authorization: Bearer ${WEBFLOW_TOKEN}" \
