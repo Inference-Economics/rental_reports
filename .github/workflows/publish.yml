@@ -6,16 +6,27 @@ on:
       backfill_month:
         description: "Month to backfill (YYYY-MM)"
         required: false
+      dry_run:
+        description: Validate cloud reports without committing or publishing
+        type: boolean
+        default: true
   schedule:
-    - cron: "20 16 1 * *"
+    - cron: "20 12 1 * *"
+      timezone: America/Toronto
 
 permissions:
   contents: write
+  id-token: write
+
+concurrency:
+  group: publish-monthly-rentals
+  cancel-in-progress: false
 
 jobs:
   publish:
     if: ${{ github.ref == 'refs/heads/main' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
 
     env:
       WEBFLOW_TOKEN: ${{ secrets.WEBFLOW_TOKEN }}
@@ -28,14 +39,41 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set MONTH
-        shell: bash
+        env:
+          REQUESTED_MONTH: ${{ inputs.backfill_month }}
         run: |
-          if [ "${{ github.event.inputs.backfill_month }}" != "" ]; then
-            echo "MONTH=${{ github.event.inputs.backfill_month }}" >> "$GITHUB_ENV"
-          else
-            echo "MONTH=$(date -u -d '1 month ago' +'%Y-%m')" >> "$GITHUB_ENV"
-          fi
-
+          python - <<'PYCODE'
+          from datetime import datetime, date, timedelta
+          from zoneinfo import ZoneInfo
+          import os, re
+          value = os.environ.get('REQUESTED_MONTH', '').strip()
+          if not value:
+              today = datetime.now(ZoneInfo('America/Toronto')).date()
+              value = (today.replace(day=1) - timedelta(days=1)).strftime('%Y-%m')
+          if not re.fullmatch(r'\d{4}-\d{2}', value):
+              raise SystemExit('Month must be YYYY-MM')
+          date.fromisoformat(value + '-01')
+          with open(os.environ['GITHUB_ENV'], 'a') as f:
+              f.write('MONTH=' + value + '\n')
+          PYCODE
+      - uses: google-github-actions/auth@v3
+        with:
+          project_id: apartment-scraping
+          workload_identity_provider: projects/270346450366/locations/global/workloadIdentityPools/rental-pipeline-github/providers/github
+      - uses: google-github-actions/setup-gcloud@v3
+      - name: Download completed report bundle
+        run: gcloud storage cp "gs://apartment-scraping-rental-data-270346450366/reports/$MONTH/reports.zip" "$RUNNER_TEMP/reports.zip"
+      - name: Validate and import HTML pair
+        run: python scripts/import_cloud_reports.py --archive "$RUNNER_TEMP/reports.zip" --month "$MONTH"
+      - name: Save validated HTML for review
+        uses: actions/upload-artifact@v4
+        with:
+          name: publication-preview-${{ env.MONTH }}
+          path: |
+            reports/toronto/${{ env.MONTH }}/index.html
+            reports/vancouver/${{ env.MONTH }}/index.html
+          if-no-files-found: error
+          retention-days: 7
       - name: Verify reports exist
         shell: bash
         run: |
@@ -43,24 +81,24 @@ jobs:
           test -s "reports/vancouver/$MONTH/index.html"
 
       - name: Commit HTML
+        if: github.event_name == 'schedule' || !inputs.dry_run
         shell: bash
         run: |
           git config user.name "gh-actions"
           git config user.email "actions@github.com"
-          git add reports
-          git commit -m "Publish $MONTH" || true
-          git push
+          git add "reports/toronto/$MONTH/index.html" "reports/vancouver/$MONTH/index.html"
+          if ! git diff --cached --quiet; then
+            git commit -m "Publish $MONTH"
+            git push
+          fi
 
       - name: Create Webflow CMS items
+        if: github.event_name == 'schedule' || !inputs.dry_run
         shell: bash
         run: |
           set -euo pipefail
 
-          if [ "${{ github.event.inputs.backfill_month }}" != "" ]; then
-            RUN_MONTH="${{ github.event.inputs.backfill_month }}"
-          else
-            RUN_MONTH="$MONTH"
-          fi
+          RUN_MONTH="$MONTH"
 
           mkpost () {
             CITY="$1"
@@ -105,6 +143,7 @@ jobs:
           mkpost vancouver
 
       - name: Publish site
+        if: github.event_name == 'schedule' || !inputs.dry_run
         shell: bash
         run: |
           PUBLISH_BODY="$(
