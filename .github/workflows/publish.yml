@@ -16,6 +16,7 @@ on:
 
 permissions:
   contents: write
+  pages: write
   id-token: write
 
 concurrency:
@@ -91,6 +92,14 @@ jobs:
             git commit -m "Publish $MONTH"
             git push
           fi
+
+      - name: Deploy and verify report pages
+        if: github.event_name == 'schedule' || !inputs.dry_run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api --method POST "repos/$GITHUB_REPOSITORY/pages/builds" > "$RUNNER_TEMP/pages-build.json"
+          python scripts/verify_live_reports.py --month "$MONTH"
 
       - name: Create Webflow CMS items
         if: github.event_name == 'schedule' || !inputs.dry_run
