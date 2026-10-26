@@ -66,6 +66,13 @@ jobs:
         run: gcloud storage cp "gs://apartment-scraping-rental-data-270346450366/reports/$MONTH/reports.zip" "$RUNNER_TEMP/reports.zip"
       - name: Validate and import HTML pair
         run: python scripts/import_cloud_reports.py --archive "$RUNNER_TEMP/reports.zip" --month "$MONTH"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Apply report design
+        run: |
+          python -m pip install --quiet -r scripts/redesign/requirements.txt
+          python scripts/redesign/restyle.py --month "$MONTH"
       - name: Save validated HTML for review
         uses: actions/upload-artifact@v4
         with:
